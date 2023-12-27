@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_map/location_screen.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:location/location.dart';
 
@@ -11,18 +10,36 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  List<LatLng> stepList = [];
+
   late GoogleMapController _googleMapController;
   Location location = Location();
+  LocationData? startLocation;
 
-  Future<void> getCurrentLocation() async {
-    final LocationData locationData = await location.getLocation();
-    if (locationData == null) {
-      return;
-    }
-    _googleMapController.moveCamera(CameraUpdate.newCameraPosition(
-        CameraPosition(
-            zoom: 17,
-            target: LatLng(locationData.latitude!, locationData.longitude!))));
+  Stream<LocationData> getCurrentLocation() async* {
+    yield* Stream.periodic(
+      const Duration(seconds: 10),
+      (_) async {
+        final LocationData locationData = await location.getLocation();
+        stepList.add(LatLng(locationData.latitude!, locationData.longitude!));
+        return locationData;
+      },
+    ).asyncMap((event) async => await event);
+  }
+
+  startUp() async {
+    startLocation = await location.getLocation();
+  }
+
+ animateToCurrentLocation(){
+    _googleMapController.animateCamera(CameraUpdate.newCameraPosition(
+        CameraPosition(zoom: 17, target: LatLng(startLocation!.latitude!, startLocation!.longitude!))));
+  }
+
+  @override
+  void initState() {
+    getCurrentLocation();
+    super.initState();
   }
 
   @override
@@ -30,100 +47,96 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('GOOGLE MAP'),
-        actions: [
-          IconButton(
-              onPressed: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const LocationScreen()));
-              },
-              icon: const Icon(Icons.location_on_rounded))
-        ],
       ),
-      body: GoogleMap(
-        initialCameraPosition: const CameraPosition(
-          zoom: 12,
-          target: LatLng(24.071078701012397, 91.13862236673937),
-          bearing: 15,
-          tilt: 5,
+
+      floatingActionButton: Align(
+        heightFactor: 1.8,
+        widthFactor: 6.9,
+        child: FloatingActionButton(
+          backgroundColor: Colors.redAccent.withOpacity(0.8),
+          splashColor: Colors.black,
+          tooltip: 'Your Location',
+          onPressed: () {
+            animateToCurrentLocation();
+          },
+          child: const Icon(Icons.my_location),
         ),
-        myLocationButtonEnabled: true,
-        myLocationEnabled: true,
-        markers: {
-          Marker(
-            markerId: const MarkerId("initialPosition"),
-            position: const LatLng(24.071078701012397, 91.13862236673937),
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueViolet),
-            infoWindow: const InfoWindow(
-                title: "This is Home", snippet: 'this is snippet'),
-            draggable: true,
-            onDragStart: (LatLng position) {
-              print(position);
-            },
-            onDrag: (LatLng position) {
-              print(position);
-            },
-            onDragEnd: (LatLng position) {
-              print(position);
-            },
-          ),
-        },
-        onMapCreated: (GoogleMapController controller) {
-          _googleMapController = controller;
-          getCurrentLocation();
-        },
-        polylines: {
-          Polyline(
-            polylineId: const PolylineId('First'),
-            color: Colors.deepOrange,
-            width: 2,
-            endCap: Cap.roundCap,
-            jointType: JointType.round,
-            patterns: [
-              PatternItem.gap(10),
-              PatternItem.dash(10),
-              PatternItem.dot,
-              PatternItem.dash(10),
-            ],
-            points: const [
-              LatLng(24.03529960502111, 91.10570311546326),
-              LatLng(24.098524430146668, 91.09727427363396),
-              LatLng(24.087892861407386, 91.15479324012995),
-              LatLng(24.005077509826332, 91.14997532218695),
-            ],
-          ),
-        },
-        polygons: {
-          Polygon(
-            fillColor: Colors.orange,
-            strokeColor: Colors.green,
-            strokeWidth: 2,
-            onTap: () {
-              print("Clickeddddddddddddddd");
-            },
-            consumeTapEvents: true,
-            polygonId: const PolygonId("basic-polygon"),
-            points: const [
-              LatLng(24.161222805044034, 91.25107616186142),
-              LatLng(24.11361725681066, 91.2078332528472),
-              LatLng(24.158945627582316, 91.16845238953829),
-              LatLng(24.188678195420366, 91.2126424536109)
-            ],
-          )
-        },
-        circles: {
-          Circle(
-            circleId: const CircleId("Circle-id"),
-            center: const LatLng(24.01616214813797, 90.98917588591576),
-            radius: 10,
-            fillColor: Colors.greenAccent,
-            consumeTapEvents: true,
-            onTap: () {
-              print('hi');
-            },
-          )
+      ),
+
+      body: StreamBuilder(
+        stream: getCurrentLocation(),
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            return GoogleMap(
+              initialCameraPosition: const CameraPosition(
+                zoom: 10,
+                target: LatLng(23.80860539167841, 90.41725361362947),
+                bearing: 15,
+                tilt: 5,
+              ),
+              onMapCreated: (GoogleMapController controller) {
+                _googleMapController = controller;
+                startUp();
+              },
+              myLocationButtonEnabled: true,
+              myLocationEnabled: true,
+              markers: {
+                Marker(
+                  markerId: const MarkerId("initialPosition"),
+                  position: LatLng(
+                      startLocation?.latitude! ?? 23.80860539167841, startLocation?.longitude! ?? 90.41725361362947),
+                  icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueViolet),
+                  infoWindow: InfoWindow(
+                      title: "Startup  Location",
+                      snippet:
+                          '${startLocation?.latitude! ?? 23.80860539167841},${startLocation?.longitude! ?? 90.41725361362947}'),
+                  draggable: true,
+                ),
+                Marker(
+                  markerId: const MarkerId('Current Location'),
+                  position: LatLng(
+                      snapshot.data!.latitude!, snapshot.data!.longitude!),
+                  icon: BitmapDescriptor.defaultMarker,
+                  draggable: true,
+                  infoWindow: InfoWindow(
+                    title: "Current Location",
+                    snippet:
+                        '${snapshot.data!.latitude!},${snapshot.data!.longitude!}',
+                  ),
+                )
+              },
+
+              polylines: {
+                Polyline(
+                  polylineId: const PolylineId('First'),
+                  color: Colors.deepOrange,
+                  width: 4,
+                  endCap: Cap.roundCap,
+                  jointType: JointType.round,
+                  points: stepList,
+                ),
+              },
+            );
+          }
+
+          else {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(
+                    height: 20,
+                  ),
+                  Text(
+                    "Map is loading.Please wait...",
+                    style: TextStyle(fontWeight: FontWeight.w200, fontSize: 20),
+                  )
+                ],
+              ),
+            );
+          }
         },
       ),
     );
